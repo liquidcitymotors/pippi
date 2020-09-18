@@ -230,11 +230,11 @@ cdef class Seq:
         for k, instrument in self.instruments.items():
             pat = instrument['pattern']
             if isinstance(pat, dict) and patseq is not None:
-                expanded = self._expandpatterns(pat, patseq, numbeats * instrument['div'])
+                expanded = self._expandpatterns(pat, patseq, int(numbeats * instrument['div'])) 
             else:
                 if isinstance(pat, dict):
                     pat = pat.items()[0]
-                expanded = [ pat[i % len(pat)] for i in range(numbeats) ]
+                expanded = [ pat[i % len(pat)] for i in range(int(numbeats * instrument['div'])) ]
 
             length, onsets = self._frompattern(
                 expanded, 
