@@ -227,8 +227,10 @@ cdef class Seq:
 
         cdef list onsets 
         cdef list params = []
+        cdef int adjusted_numbeats
         for k, instrument in self.instruments.items():
             pat = instrument['pattern']
+            adjusted_numbeats = numbeats * instrument['div']
             if isinstance(pat, dict) and patseq is not None:
                 expanded = self._expandpatterns(pat, patseq, int(numbeats * instrument['div'])) 
             else:
