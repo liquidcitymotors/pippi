@@ -22,17 +22,6 @@ from pippi cimport soundpipe
 
 cdef double VSPEED_MIN = 0.0001
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef double[:,:] _dub(double[:,:] target, int target_length, double[:,:] todub, int todub_length, int channels, int framepos) nogil:
-    cdef int i = 0
-    cdef int c = 0
-    for i in range(todub_length):
-        for c in range(channels):
-            target[framepos+i, c] += todub[i, c]
-
-    return target
-
 cdef double[:,:] _pan(double[:,:] out, int length, int channels, double[:] _pos, int method):
     cdef double left = 0.5
     cdef double right = 0.5
@@ -770,10 +759,10 @@ cdef class SoundBuffer:
         cdef double start = random.triangular(0, maxlen)
         return self.cut(start, length)
 
-    cdef void _dub(SoundBuffer self, SoundBuffer sound, int framepos):
-        cdef int target_length = len(self)
-        cdef int todub_length = len(sound)
-        cdef int total_length = framepos + todub_length
+    cdef void _dub(SoundBuffer self, SoundBuffer sound, long framepos):
+        cdef long target_length = len(self)
+        cdef long todub_length = len(sound)
+        cdef long total_length = framepos + todub_length
         cdef int channels = self.channels
 
         if target_length == 0:
@@ -786,9 +775,13 @@ cdef class SoundBuffer:
                 ))
             target_length = len(self)
 
-        self.frames = _dub(self.frames, target_length, sound.frames, todub_length, channels, framepos)
+        cdef long i = 0
+        cdef int c = 0
+        for i in range(todub_length):
+            for c in range(channels):
+                self.frames[framepos+i, c] += sound.frames[i, c]
 
-    def dub(self, sounds, double pos=-1, int framepos=0):
+    def dub(self, sounds, double pos=-1, long framepos=0):
         """ Dub a sound or iterable of sounds into this soundbuffer
             starting at the given position in fractional seconds.
 
@@ -802,7 +795,7 @@ cdef class SoundBuffer:
         cdef int sound_index
 
         if pos >= 0:
-            framepos = <int>(pos * self.samplerate)
+            framepos = <long>(pos * self.samplerate)
 
         if isinstance(sounds, SoundBuffer):
             self._dub(sounds, framepos)

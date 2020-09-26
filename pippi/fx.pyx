@@ -206,9 +206,9 @@ cpdef SoundBuffer fold(SoundBuffer snd, object amp=1, bint norm=True):
 @cython.wraparound(False)
 @cython.cdivision(True)
 cdef double[:,:] _norm(double[:,:] snd, double ceiling):
-    cdef int i = 0
+    cdef long i = 0
     cdef int c = 0
-    cdef int framelength = len(snd)
+    cdef long framelength = len(snd)
     cdef int channels = snd.shape[1]
     cdef double normval = 1
     cdef double maxval = _mag(snd)
@@ -682,9 +682,8 @@ cpdef SoundBuffer go(SoundBuffer snd,
 
     while pos < outlen:
         grain = snd.cut(pos, grainlength)
-        clip = random.triangular(minclip, maxclip)
         grain *= random.triangular(0, factor * wet)
-        grain = grain.clip(-clip, clip)
+        grain = grain.softclip()
         out.dub(grain * window.data, pos)
 
         pos += (grainlength/2) * (1/density)
@@ -1297,6 +1296,30 @@ cpdef SoundBuffer vspeed2(SoundBuffer snd, object speed, int quality=5, bint nor
     return _vspeed2(snd, speed, quality, normalize)
 
 
+cpdef SoundBuffer weave(SoundBuffer snd, double threshold=0.1, bint above=True):
+    # Only output samples above or below the threshold
+    # Inspired by the Wovenland 2 recordings by Toshiya Tsunoda & Taku Unami
 
+    cdef long length = len(snd)
+    cdef int channels = snd.channels
+    cdef int samplerate = snd.samplerate
 
+    cdef double[:,:] out = np.zeros((length, channels), dtype='d')
+
+    cdef long i = 0
+    cdef long c = 0
+
+    if above:
+        for c in range(channels):
+            for i in range(length):
+                if abs(snd.frames[i,c]) >= threshold:
+                    out[i,c] = snd.frames[i,c]
+
+    else:
+        for c in range(channels):
+            for i in range(length):
+                if abs(snd.frames[i,c]) <= threshold:
+                    out[i,c] = snd.frames[i,c]
+
+    return SoundBuffer(out, channels=channels, samplerate=samplerate)
 
