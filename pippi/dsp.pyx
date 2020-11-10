@@ -4,6 +4,7 @@ import glob
 import math
 import multiprocessing as mp
 import numpy as np
+from pathlib import Path
 import random
 
 cimport cython
@@ -17,6 +18,7 @@ from pippi.wavetables cimport Wavetable, _randline
 from pippi.wavesets cimport Waveset
 from pippi cimport rand as _rand
 from pippi cimport lists
+from pippi.sounddb cimport SoundDB
 from pippi.defaults cimport DEFAULT_CHANNELS, DEFAULT_SAMPLERATE
 
 # Just a shorthand for MS in scripts. 
@@ -81,6 +83,9 @@ cpdef SoundBuffer mix(list sounds, align_end=False):
 cpdef Wavetable randline(int numpoints, double lowvalue=0, double highvalue=1, int wtsize=4096):
     return _randline(numpoints, lowvalue, highvalue, wtsize)
 
+cpdef SoundDB injest(SoundBuffer snd, str dbname=None, object dbpath=None, bint overwrite=False):
+    return SoundDB(snd, dbname, dbpath, overwrite)
+
 def event(*args, **kwargs):
     return Event(*args, **kwargs)
 
@@ -94,7 +99,7 @@ cpdef Wavetable wt(object values,
     ):
     return Wavetable(values, lowvalue, highvalue, wtsize, False)
 
-cpdef Waveset ws(object values=None, int crossings=3, int offset=-1, int limit=-1, int modulo=1, int samplerate=-1, list wavesets=None):
+cpdef Waveset ws(object values=None, object crossings=3, int offset=-1, int limit=-1, int modulo=1, int samplerate=-1, list wavesets=None):
     return Waveset(values, crossings, offset, limit, modulo, samplerate, wavesets)
 
 cpdef Wavetable win(object values, 
@@ -164,6 +169,9 @@ cpdef SoundBuffer read(object filename, double length=-1, double start=0):
         `Path` instance from the standard library `pathlib` module.
     """
     return SoundBuffer(filename=str(filename), length=length, start=start)
+
+cpdef list readall(str path, double length=-1, double start=0):
+    return [ read(filename, length, start) for filename in Path('.').glob(path) ]
 
 cpdef double rand(double low=0, double high=1):
     return _rand.rand(low, high)

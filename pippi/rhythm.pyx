@@ -32,11 +32,12 @@ BELL = CLAVE['bell']
 TRESILLO = CLAVE['tresillo']
 
 
-def makebar(str k, dict instrument, double length, list onsets, bint stems, str stemsdir, str sectionname, int sectionindex):
+def makesection(str k, dict instrument, double length, list onsets, bint stems, str stemsdir, str sectionname, int sectionindex):
     cdef SoundBuffer clang
     cdef SoundBuffer bar = SoundBuffer(length=length)
     cdef int count = 0
     cdef double onset
+    cdef double beat
 
     """
     cdef dict ctx = {
@@ -47,13 +48,17 @@ def makebar(str k, dict instrument, double length, list onsets, bint stems, str 
     }
     """
 
-    cdef Event ctx = Event(count=0, sectionname=sectionname, sectionindex=sectionindex)
+    cdef Event ctx = Event(count=0, sectionname=sectionname, sectionindex=sectionindex, length=length)
 
     cdef bint showwarning = False
 
-    for onset in onsets:
+    for onset, event, beat in onsets:
         ctx.pos = onset/length
+        ctx.onset = onset
         ctx.count = count
+        ctx.event = event
+        ctx.beat = beat
+
         if instrument.get('callback', None) is not None:
             sig = signature(instrument['callback'])
             if len(sig.parameters) > 1:
@@ -111,7 +116,7 @@ cdef class Seq:
         self.instruments[name].update(kwargs)
 
 
-    def _onsetswing(self, list onsets, double amount, double[:] beat):
+    def _onsetswing(self, list onsets, double amount):
         """ Add MPC-style swing to a list of onsets.
             Amount is a value between 0 and 1, which 
             maps to a swing amount between 0% and 75%.
@@ -130,13 +135,14 @@ cdef class Seq:
         cdef int i = 0
         cdef double onset = 0
 
-        for i, onset in enumerate(onsets):
+        for onset, event, beat in onsets:
             if i % 2 == 1:
-                onsets[i] += interpolation._linear_pos(beat, <double>i/len(onsets)) * amount * 0.75
+                onsets[i][0] += beat * amount * 0.75
+            i += 1
 
         return onsets
 
-    def _topositions(self, object p, double[:] beat, double[:] smear):
+    def _topositions(self, str p, double[:] beat, double[:] smear):
         cdef double pos = 0
         cdef int count = 0
         cdef double delay = 0
@@ -147,7 +153,7 @@ cdef class Seq:
         cdef int numbeats = len(p)
 
         while count < numbeats:
-            index = count % len(p)
+            index = count % numbeats 
             event = p[index]
             _beat = interpolation._linear_pos(beat, count/<double>numbeats)
             _beat *= interpolation._linear_pos(smear, count/<double>numbeats)
@@ -160,7 +166,7 @@ cdef class Seq:
 
             elif event == '[':
                 end = p.find(']', index) - 1
-                div = len(p[index : end])
+                div = len(p[index:end])
                 count += 1
                 continue
 
@@ -169,7 +175,7 @@ cdef class Seq:
                 count += 1
                 continue
 
-            out += [ pos ]
+            out += [[pos, event, _beat]]
             pos += _beat / div
             count += 1
 
@@ -177,7 +183,7 @@ cdef class Seq:
 
     def _frompattern(
         self,
-        object pat,            # Pattern
+        str pat,               # Pattern
         double[:] beat,        # Length of a beat in seconds -- may be given as a curve
         double swing=0,        # MPC swing amount 0-1
         double div=1,          # Beat subdivision
@@ -187,7 +193,7 @@ cdef class Seq:
         cdef double[:] _beat = np.divide(beat, div)
 
         length, positions = self._topositions(pat, _beat, _smear)
-        positions = self._onsetswing(positions, swing, _beat)
+        positions = self._onsetswing(positions, swing)
 
         return length, positions
 
@@ -224,7 +230,7 @@ cdef class Seq:
     def play(self, int numbeats, str patseq=None, bint stems=False, str stemsdir='', bint pool=False):
         cdef SoundBuffer out = SoundBuffer()
         cdef dict instrument
-
+        cdef str expanded
         cdef list onsets 
         cdef list params = []
         cdef int adjusted_numbeats
@@ -236,7 +242,7 @@ cdef class Seq:
             else:
                 if isinstance(pat, dict):
                     pat = pat.items()[0]
-                expanded = [ pat[i % len(pat)] for i in range(int(numbeats * instrument['div'])) ]
+                expanded = ''.join([ pat[i % len(pat)] for i in range(adjusted_numbeats) ])
 
             length, onsets = self._frompattern(
                 expanded, 
@@ -250,11 +256,11 @@ cdef class Seq:
        
         out = SoundBuffer(length=length)
         if pool: 
-            for k, bar in dsp.pool(makebar, params=params):
+            for k, bar in dsp.pool(makesection, params=params):
                 out.dub(bar)
         else:
             for p in params:
-                k, bar = makebar(*p)
+                k, bar = makesection(*p)
                 out.dub(bar)
 
         return out
@@ -298,11 +304,11 @@ cdef class Seq:
            
             sectionout = SoundBuffer(length=sectionlength)
             if pool: 
-                for k, bar in dsp.pool(makebar, params=params):
+                for k, bar in dsp.pool(makesection, params=params):
                     sectionout.dub(bar)
             else:
                 for p in params:
-                    k, bar = makebar(*p)
+                    k, bar = makesection(*p)
                     sectionout.dub(bar)
 
             out.dub(sectionout, mainposition)
